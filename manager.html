@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LazyLoad Manager</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: rgba(255,255,255,0.08); --border2: rgba(255,255,255,0.15);
+    --text: #e8eaf0; --muted: #7a7f9a;
+    --accent: #4f8ef7; --accent-dim: rgba(79,142,247,0.12);
+    --green: #3ecf8e; --green-dim: rgba(62,207,142,0.12);
+    --red: #f56565; --red-dim: rgba(245,101,101,0.12);
+    --amber: #f6ad55; --amber-dim: rgba(246,173,85,0.12);
+    --radius: 10px; --mono: 'JetBrains Mono','Fira Code','Courier New',monospace;
+  }
+  body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; font-size:14px; line-height:1.6; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:2rem 1rem; }
+
+  /* LOGIN */
+  #login-screen { width:100%; max-width:380px; }
+  .login-logo { text-align:center; margin-bottom:2.5rem; }
+  .login-logo .logo-icon { width:52px;height:52px;background:var(--accent-dim);border:1px solid rgba(79,142,247,0.3);border-radius:14px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:14px;font-size:22px; }
+  .login-logo h1 { font-size:20px;font-weight:600;letter-spacing:-0.3px; }
+  .login-logo p { font-size:13px;color:var(--muted);margin-top:4px; }
+  .login-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:2rem; }
+  .field-label { font-size:12px;font-weight:500;color:var(--muted);letter-spacing:0.04em;text-transform:uppercase;margin-bottom:8px;display:block; }
+  .field-input { width:100%;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;color:var(--text);font-size:14px;font-family:var(--mono);outline:none;transition:border-color 0.2s;letter-spacing:0.05em; }
+  .field-input:focus { border-color:var(--accent); }
+  .field-input.error { border-color:var(--red); }
+  .btn { width:100%;padding:11px;border-radius:var(--radius);font-size:14px;font-weight:500;cursor:pointer;border:none;transition:opacity 0.15s,transform 0.1s;margin-top:16px; }
+  .btn:active { transform:scale(0.98); }
+  .btn-primary { background:var(--accent);color:#fff; }
+  .btn-primary:hover { opacity:0.88; }
+  .login-error { background:var(--red-dim);border:1px solid rgba(245,101,101,0.25);border-radius:var(--radius);padding:10px 14px;color:var(--red);font-size:13px;margin-top:12px;display:none; }
+
+  /* APP */
+  #app-screen { display:none;width:100%;max-width:780px; }
+  .app-header { display:flex;align-items:center;justify-content:space-between;margin-bottom:1.75rem; }
+  .app-header h2 { font-size:18px;font-weight:600;letter-spacing:-0.3px; }
+  .app-header p { font-size:12px;color:var(--muted);margin-top:2px; }
+  .btn-sm { padding:7px 14px;border-radius:8px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border2);background:transparent;color:var(--muted);transition:all 0.15s;white-space:nowrap; }
+  .btn-sm:hover { background:var(--surface2);color:var(--text); }
+
+  /* Token card */
+  .token-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.25rem 1.5rem;margin-bottom:1.25rem; }
+  .token-row { display:flex;gap:10px;align-items:flex-end; }
+  .token-row .fw { flex:1; }
+  .token-row label { font-size:11px;color:var(--muted);margin-bottom:5px;display:block; }
+  .token-status { font-size:11px;margin-top:6px; }
+  .ts-ok { color:var(--green); } .ts-err { color:var(--red); } .ts-idle { color:var(--muted); }
+  .btn-verify { padding:9px 16px;border-radius:8px;background:var(--surface2);color:var(--muted);font-size:12px;font-weight:500;border:1px solid var(--border2);cursor:pointer;white-space:nowrap;transition:all 0.15s;flex-shrink:0; }
+  .btn-verify:hover { color:var(--text);border-color:var(--border); }
+
+  /* Add card */
+  .add-card { background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.5rem;margin-bottom:1.25rem; }
+  .card-title { font-size:12px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:1rem; }
+  .add-row { display:flex;gap:10px;align-items:flex-end; }
+  .add-row .fw { flex:1; }
+  .add-row label { font-size:11px;color:var(--muted);margin-bottom:5px;display:block; }
+  .fi { width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:var(--mono);outline:none;transition:border-color 0.2s; }
+  .fi:focus { border-color:var(--accent); }
+  .btn-add { padding:9px 18px;border-radius:8px;background:var(--accent);color:#fff;font-size:13px;font-weight:500;border:none;cursor:pointer;white-space:nowrap;transition:opacity 0.15s;flex-shrink:0; }
+  .btn-add:hover { opacity:0.85; }
+
+  /* List */
+  .list-wrap { background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:1.25rem; }
+  .list-head { display:grid;grid-template-columns:1fr 130px 130px 44px;gap:8px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:11px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em; }
+  .d-row { display:grid;grid-template-columns:1fr 130px 130px 44px;gap:8px;padding:12px 16px;align-items:center;border-bottom:1px solid var(--border);transition:background 0.1s; }
+  .d-row:last-child { border-bottom:none; }
+  .d-row:hover { background:rgba(255,255,255,0.02); }
+  .d-name { font-family:var(--mono);font-size:13px; }
+  .d-date { font-size:12px;color:var(--muted);font-family:var(--mono); }
+  .badge { display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:500;padding:3px 9px;border-radius:20px; }
+  .b-active { background:var(--green-dim);color:var(--green);border:1px solid rgba(62,207,142,0.2); }
+  .b-expiring { background:var(--amber-dim);color:var(--amber);border:1px solid rgba(246,173,85,0.2); }
+  .b-expired { background:var(--red-dim);color:var(--red);border:1px solid rgba(245,101,101,0.2); }
+  .dot { width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block; }
+  .btn-del { width:30px;height:30px;border-radius:7px;background:transparent;border:1px solid var(--border);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all 0.15s;justify-self:center; }
+  .btn-del:hover { background:var(--red-dim);border-color:rgba(245,101,101,0.3);color:var(--red); }
+  .empty { padding:3rem;text-align:center;color:var(--muted);font-size:13px; }
+
+  /* Save bar */
+  .save-bar { display:flex;gap:12px;align-items:center;padding:1rem 0; }
+  .btn-save { padding:11px 28px;border-radius:var(--radius);background:var(--green);color:#0f1117;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:opacity 0.15s;display:flex;align-items:center;gap:8px; }
+  .btn-save:hover { opacity:0.85; }
+  .btn-save:disabled { opacity:0.4;cursor:not-allowed; }
+  .save-hint { font-size:12px;color:var(--muted); }
+
+  /* Progress */
+  .progress-wrap { background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:1.5rem;display:none;margin-top:1rem; }
+  .progress-step { display:flex;align-items:center;gap:12px;padding:8px 0;font-size:13px; }
+  .p-icon { width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0; }
+  .p-wait { background:var(--surface2);color:var(--muted); }
+  .p-running { background:var(--accent-dim);color:var(--accent);animation:pulse 1s infinite; }
+  .p-done { background:var(--green-dim);color:var(--green); }
+  .p-fail { background:var(--red-dim);color:var(--red); }
+  .p-label { color:var(--muted); }
+  .p-label.active { color:var(--text); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  .toast { position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:10px 20px;font-size:13px;color:var(--text);opacity:0;transition:all 0.25s;pointer-events:none;white-space:nowrap;z-index:999; }
+  .toast.show { opacity:1;transform:translateX(-50%) translateY(0); }
+
+  .info-box { background:var(--accent-dim);border:1px solid rgba(79,142,247,0.2);border-radius:var(--radius);padding:10px 14px;font-size:12px;color:#7aabf7;margin-top:10px;line-height:1.6; }
+  .info-box a { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-logo">
+    <div class="logo-icon">🔐</div>
+    <h1>LazyLoad Manager</h1>
+    <p>Domain access control panel</p>
+  </div>
+  <div class="login-card">
+    <label class="field-label" for="pw-input">Password</label>
+    <input class="field-input" type="password" id="pw-input" placeholder="Enter your password" autocomplete="current-password">
+    <div class="login-error" id="login-error">Incorrect password. Try again.</div>
+    <button class="btn btn-primary" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app-screen">
+  <div class="app-header">
+    <div>
+      <h2>Domain Manager</h2>
+      <p>Changes save directly to GitHub — no manual steps</p>
+    </div>
+    <button class="btn-sm" onclick="doLogout()">Sign out</button>
+  </div>
+
+  <!-- GitHub Token -->
+  <div class="token-card">
+    <div class="card-title">GitHub Token</div>
+    <div class="token-row">
+      <div class="fw">
+        <label>Personal Access Token (repo scope)</label>
+        <input class="fi" type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+      </div>
+      <button class="btn-verify" onclick="verifyToken()">Verify</button>
+    </div>
+    <div class="token-status ts-idle" id="token-status">Token দিয়ে Verify করো</div>
+    <div class="info-box">
+      Token পেতে: <a href="https://github.com/settings/tokens/new" target="_blank">github.com/settings/tokens/new</a> → Note: "LazyLoad Manager" → Expiration: No expiration → Scope: ✅ <strong>repo</strong> → Generate → Copy
+    </div>
+  </div>
+
+  <!-- Add domain -->
+  <div class="add-card">
+    <div class="card-title">Add new domain</div>
+    <div class="add-row">
+      <div class="fw">
+        <label>Domain (without www / https)</label>
+        <input class="fi" id="new-domain" type="text" placeholder="yourclient.com">
+      </div>
+      <div class="fw" style="max-width:160px">
+        <label>Start date (আজকের date)</label>
+        <input class="fi" id="new-date" type="date">
+      </div>
+      <button class="btn-add" onclick="addDomain()">+ Add</button>
+    </div>
+  </div>
+
+  <!-- List -->
+  <div class="list-wrap">
+    <div class="list-head">
+      <span>Domain</span><span>Added</span><span>Status / Expiry</span><span></span>
+    </div>
+    <div id="domain-list"></div>
+  </div>
+
+  <!-- Save -->
+  <div class="save-bar">
+    <button class="btn-save" id="save-btn" onclick="saveToGitHub()">
+      <span id="save-icon">💾</span>
+      <span id="save-label">Save to GitHub</span>
+    </button>
+    <span class="save-hint">Encrypts domains → updates allowed-domains.json → clears CDN cache</span>
+  </div>
+
+  <!-- Progress -->
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-step">
+      <div class="p-icon p-wait" id="pi-1">1</div>
+      <span class="p-label" id="pl-1">Encrypting domain list…</span>
+    </div>
+    <div class="progress-step">
+      <div class="p-icon p-wait" id="pi-2">2</div>
+      <span class="p-label" id="pl-2">Reading current file from GitHub…</span>
+    </div>
+    <div class="progress-step">
+      <div class="p-icon p-wait" id="pi-3">3</div>
+      <span class="p-label" id="pl-3">Updating allowed-domains.json…</span>
+    </div>
+    <div class="progress-step">
+      <div class="p-icon p-wait" id="pi-4">4</div>
+      <span class="p-label" id="pl-4">Clearing jsDelivr CDN cache…</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════
+const ADMIN_PASSWORD_HASH = '6901306b3a9ade4ee29b2499ddd35a8d8099c513127629de86df5478d88584ef';
+// default password: "password"
+// নিজের password hash পেতে: https://emn178.github.io/online-tools/sha256.html
+
+const SECRET_KEY  = 'X9kP2mQzL7nRvTsY'; // lazyload-5.0.11.js এর key এর সাথে মিলতে হবে
+const GH_OWNER    = 'bcwv';
+const GH_REPO     = 'caa';
+const GH_FILE     = 'allowed-domains.json';
+const GH_BRANCH   = 'main';
+// ══════════════════════════════════════════════
+
+let sites = [];
+let ghToken = '';
+let tokenVerified = false;
+
+// ── Crypto helpers ────────────────────────────
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function getRawKeyBytes(k) {
+  const raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(k));
+  return raw.slice(0, 16);
+}
+async function getAesEncryptKey(k) {
+  return crypto.subtle.importKey('raw', await getRawKeyBytes(k), {name:'AES-CBC'}, false, ['encrypt']);
+}
+async function getAesDecryptKey(k) {
+  return crypto.subtle.importKey('raw', await getRawKeyBytes(k), {name:'AES-CBC'}, false, ['decrypt']);
+}
+function toB64(buf) { return btoa(String.fromCharCode(...new Uint8Array(buf))); }
+async function encryptSites(arr, k) {
+  const iv = crypto.getRandomValues(new Uint8Array(16));
+  const key = await getAesEncryptKey(k);
+  const enc = await crypto.subtle.encrypt({name:'AES-CBC',iv}, key, new TextEncoder().encode(JSON.stringify(arr)));
+  return toB64(iv) + ':' + toB64(enc);
+}
+function fromB64(s) {
+  const bin = atob(s);
+  const buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  return buf.buffer;
+}
+async function decryptSites(enc, k) {
+  const [ivB64, dataB64] = enc.split(':');
+  const iv   = fromB64(ivB64);
+  const data = fromB64(dataB64);
+  const key  = await getAesDecryptKey(k);
+  const dec  = await crypto.subtle.decrypt({name:'AES-CBC', iv: new Uint8Array(iv)}, key, data);
+  return JSON.parse(new TextDecoder().decode(dec));
+}
+
+// ── Login ─────────────────────────────────────
+async function doLogin() {
+  const pw = document.getElementById('pw-input').value;
+  const hash = await sha256(pw);
+  if (hash === ADMIN_PASSWORD_HASH) {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app-screen').style.display = 'block';
+    document.getElementById('new-date').valueAsDate = new Date();
+    loadFromGitHub();
+  } else {
+    document.getElementById('pw-input').classList.add('error');
+    document.getElementById('login-error').style.display = 'block';
+  }
+}
+document.getElementById('pw-input').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+function doLogout() {
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+  document.getElementById('pw-input').value = '';
+  sites = []; ghToken = ''; tokenVerified = false;
+}
+
+// ── Token verify ──────────────────────────────
+async function verifyToken() {
+  ghToken = document.getElementById('gh-token').value.trim();
+  if (!ghToken) { showToast('Token দাও'); return; }
+  setTokenStatus('checking');
+  try {
+    const r = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}`, {
+      headers: { Authorization: `token ${ghToken}` }
+    });
+    if (r.ok) { tokenVerified = true; setTokenStatus('ok'); showToast('Token verified ✓'); }
+    else { tokenVerified = false; setTokenStatus('err'); showToast('Token কাজ করছে না'); }
+  } catch(e) { tokenVerified = false; setTokenStatus('err'); }
+}
+function setTokenStatus(s) {
+  const el = document.getElementById('token-status');
+  if (s==='ok')       { el.className='token-status ts-ok'; el.textContent='✓ Token verified — repo access confirmed'; }
+  else if (s==='err') { el.className='token-status ts-err'; el.textContent='✗ Invalid token or no repo access'; }
+  else if (s==='checking') { el.className='token-status ts-idle'; el.textContent='Checking…'; }
+}
+
+// ── Load existing JSON from GitHub ───────────────
+async function loadFromGitHub() {
+  try {
+    // Use raw URL to avoid cache issues on load
+    const url = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/${GH_FILE}?t=${Date.now()}`;
+    const r = await fetch(url);
+    if (!r.ok) return;
+    const cfg = await r.json();
+    if (cfg.d) {
+      try {
+        sites = await decryptSites(cfg.d, SECRET_KEY);
+        renderList();
+      } catch(e) {
+        showToast('Decrypt failed — key mismatch?');
+      }
+    }
+  } catch(e) {}
+}
+
+// ── Domain CRUD ───────────────────────────────
+function normDomain(d) { return d.replace(/^(https?:\/\/)?(www\.)?/i,'').replace(/\/.*$/,'').trim().toLowerCase(); }
+
+function addDomain() {
+  const raw  = document.getElementById('new-domain').value.trim();
+  const date = document.getElementById('new-date').value;
+  if (!raw || !date) { showToast('Domain এবং date দুটোই দাও'); return; }
+  const domain = normDomain(raw);
+  if (sites.find(s => normDomain(s.domain) === domain)) { showToast('এই domain আগেই আছে'); return; }
+  sites.push({ domain, add_date: date });
+  document.getElementById('new-domain').value = '';
+  document.getElementById('new-date').valueAsDate = new Date();
+  renderList();
+  showToast('Domain যোগ হয়েছে ✓');
+}
+
+function deleteDomain(i) {
+  if (!confirm(`"${sites[i].domain}" মুছে ফেলবে?`)) return;
+  sites.splice(i, 1);
+  renderList();
+}
+
+function getStatus(addDate) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const exp = new Date(addDate); exp.setMonth(exp.getMonth()+6); exp.setHours(0,0,0,0);
+  const days = Math.round((exp - today) / 86400000);
+  const expStr = exp.toISOString().slice(0,10);
+  if (days < 0) return { label:'Expired', cls:'b-expired', expStr };
+  if (days <= 30) return { label:`${days}d left`, cls:'b-expiring', expStr };
+  return { label:'Active', cls:'b-active', expStr };
+}
+
+function renderList() {
+  const el = document.getElementById('domain-list');
+  if (!sites.length) { el.innerHTML = '<div class="empty">কোনো domain নেই — উপরে add করো</div>'; return; }
+  el.innerHTML = sites.map((s,i) => {
+    const st = getStatus(s.add_date);
+    return `<div class="d-row">
+      <span class="d-name">${s.domain}</span>
+      <span class="d-date">${s.add_date}</span>
+      <span><span class="badge ${st.cls}"><span class="dot"></span>${st.label} (${st.expStr})</span></span>
+      <button class="btn-del" title="Delete" onclick="deleteDomain(${i})">×</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Save to GitHub ────────────────────────────
+async function saveToGitHub() {
+  if (!sites.length) { showToast('আগে কমপক্ষে একটা domain যোগ করো'); return; }
+  if (!tokenVerified) { showToast('আগে GitHub Token verify করো'); return; }
+
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  document.getElementById('save-label').textContent = 'Saving…';
+  document.getElementById('progress-wrap').style.display = 'block';
+  resetProgress();
+
+  try {
+    // Step 1: Encrypt
+    setStep(1, 'running');
+    const encrypted = await encryptSites(sites, SECRET_KEY);
+    // We store both: encrypted (for lazyload.js) + plaintext sites list (for manager reload)
+    const jsonContent = JSON.stringify({ d: encrypted }, null, 2);
+    setStep(1, 'done');
+
+    // Step 2: Get current file SHA (needed for GitHub update API)
+    setStep(2, 'running');
+    const fileRes = await fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}`,
+      { headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' } }
+    );
+    let sha = null;
+    if (fileRes.ok) { const fd = await fileRes.json(); sha = fd.sha; }
+    setStep(2, 'done');
+
+    // Step 3: Push updated file
+    setStep(3, 'running');
+    const body = {
+      message: `Update allowed-domains — ${new Date().toISOString().slice(0,10)}`,
+      content: btoa(unescape(encodeURIComponent(jsonContent))),
+      branch: GH_BRANCH
+    };
+    if (sha) body.sha = sha;
+    const pushRes = await fetch(
+      `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`,
+      { method:'PUT', headers:{ Authorization:`token ${ghToken}`, Accept:'application/vnd.github.v3+json', 'Content-Type':'application/json' }, body: JSON.stringify(body) }
+    );
+    if (!pushRes.ok) { const e = await pushRes.json(); throw new Error(e.message); }
+    setStep(3, 'done');
+
+    // Step 4: Purge jsDelivr cache
+    setStep(4, 'running');
+    try {
+      await fetch(`https://purge.jsdelivr.net/gh/${GH_OWNER}/${GH_REPO}@${GH_BRANCH}/${GH_FILE}`, {mode:'no-cors'});
+    } catch(e) {}
+    setStep(4, 'done');
+
+    showToast('✓ GitHub-এ save হয়েছে! Cache cleared.');
+  } catch(err) {
+    showToast('Error: ' + err.message);
+    // Mark remaining steps failed
+    [1,2,3,4].forEach(n => {
+      if (document.getElementById(`pi-${n}`).classList.contains('p-running') ||
+          document.getElementById(`pi-${n}`).classList.contains('p-wait')) setStep(n, 'fail');
+    });
+  }
+
+  btn.disabled = false;
+  document.getElementById('save-label').textContent = 'Save to GitHub';
+  document.getElementById('save-icon').textContent = '💾';
+}
+
+function resetProgress() {
+  [1,2,3,4].forEach(n => {
+    const pi = document.getElementById(`pi-${n}`);
+    const pl = document.getElementById(`pl-${n}`);
+    pi.className = 'p-icon p-wait';
+    pi.textContent = n;
+    pl.className = 'p-label';
+  });
+}
+
+function setStep(n, state) {
+  const pi = document.getElementById(`pi-${n}`);
+  const pl = document.getElementById(`pl-${n}`);
+  pi.className = `p-icon p-${state}`;
+  if (state==='running') { pi.textContent='…'; pl.className='p-label active'; }
+  else if (state==='done') { pi.textContent='✓'; pl.className='p-label ts-ok'; }
+  else if (state==='fail') { pi.textContent='✗'; pl.className='p-label ts-err'; }
+}
+
+// ── Toast ─────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+
+// init
+document.getElementById('new-date') && (document.getElementById('new-date').valueAsDate = new Date());
+</script>
+</body>
+</html>
